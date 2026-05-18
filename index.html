@@ -511,6 +511,9 @@ body {
 /* ===== SCROLLBAR ===== */
 * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
 
+/* Mobile Upload-Buttons (Kamera + Galerie) - Desktop versteckt */
+.mobile-upload-buttons { display: none; }
+
 /* ===== MOBILE HEADER (default hidden) ===== */
 .mobile-header { display: none; }
 .mobile-fab { display: none; }
@@ -688,6 +691,39 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
   .set-dropdown { max-height: 240px; }
 
   .submit-btn { padding: 14px; font-size: 14px; min-height: 50px; }
+
+  /* Mobile Upload-Buttons sichtbar machen */
+  .img-upload-area {
+    /* Klick auf die Vorschau-Area auf Mobile abschalten - User soll die Buttons benutzen */
+    pointer-events: none;
+  }
+  .img-upload-area.has-image {
+    /* Wenn schon ein Bild da ist, sehen wir nur die Vorschau */
+    pointer-events: none;
+  }
+  .mobile-upload-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .mobile-upload-btn {
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px;
+    padding: 12px 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'Sora', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 46px;
+    transition: background 0.15s;
+  }
+  .mobile-upload-btn i { font-size: 16px; color: var(--accent); }
+  .mobile-upload-btn:active { background: rgba(255,255,255,0.1); }
 
   /* Splash-Hint kleiner */
   .splash-hint { font-size: 9px; letter-spacing: 3px; bottom: max(30px, env(safe-area-inset-bottom)); }
@@ -878,6 +914,16 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
           <div class="up-icon"><i class="ti ti-photo"></i></div>
           <p>Bild hochladen · JPG / PNG / WebP</p>
           <input type="file" id="f_img" accept="image/*" onchange="previewImg(event)" style="display:none">
+        </div>
+        <!-- Mobile-only: separate Buttons für Kamera & Galerie -->
+        <div class="mobile-upload-buttons">
+          <button type="button" class="mobile-upload-btn" onclick="document.getElementById('f_img_camera').click()">
+            <i class="ti ti-camera"></i> Foto aufnehmen
+          </button>
+          <button type="button" class="mobile-upload-btn" onclick="document.getElementById('f_img').click()">
+            <i class="ti ti-photo"></i> Aus Galerie
+          </button>
+          <input type="file" id="f_img_camera" accept="image/*" capture="environment" onchange="previewImg(event)" style="display:none">
         </div>
       </div>
       <button type="submit" class="submit-btn" id="formSubmitBtn">Item speichern</button>
