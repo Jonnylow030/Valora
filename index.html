@@ -102,6 +102,17 @@ body {
   to { opacity: 1; transform: scale(1); }
 }
 
+/* Splash auf Smartphones: Bild komplett zeigen, Logo nicht riesig */
+@media (max-width: 768px) {
+  #splash {
+    /* Hintergrundfarbe passend zum Bild (dunkelblau) */
+    background: #0c1828;
+  }
+  #splash::before {
+    background-size: contain;
+  }
+}
+
 /* ===== MAIN APP ===== */
 #app {
   display: none; height: 100vh; overflow: hidden;
