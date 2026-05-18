@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trading Card Manager EXO</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 /* ===== RESET & BASE ===== */
@@ -953,13 +954,81 @@ function setAccent(tcg) {
   document.documentElement.style.setProperty('--accent-glow', c.glow);
 }
 
+// ===== SUPABASE =====
+const SUPABASE_URL = 'https://domnymdftduucbkzkgac.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_VjmoYXFhAUzz_gVA-311kQ_e6KmexnX';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 // ===== STORAGE =====
 
 async function loadData() {
-  try { const r = await window.storage.get("tcm_data_v2"); if (r && r.value) data = JSON.parse(r.value); } catch(e) { data = {}; }
+  try {
+    const { data: rows, error } = await sb.from('items').select('*');
+    if (error) throw error;
+    data = {};
+    rows.forEach(row => {
+      if (!data[row.tcg]) data[row.tcg] = {};
+      if (!data[row.tcg][row.section]) data[row.tcg][row.section] = [];
+      data[row.tcg][row.section].push({
+        id:         row.id,
+        type:       row.type,
+        name:       row.name,
+        cardNumber: row.card_number,
+        setName:    row.set_name,
+        condition:  row.condition,
+        lang:       row.lang,
+        value:      row.value,
+        purchase:   row.purchase,
+        imgData:    row.img_data
+      });
+    });
+  } catch(e) {
+    console.error('loadData Fehler:', e);
+    data = {};
+  }
 }
 
-async function saveData() { try { await window.storage.set("tcm_data_v2", JSON.stringify(data)); } catch(e) {} }
+async function saveData() {
+  // Alle Items aus dem lokalen state sammeln und upserten
+  try {
+    const rows = [];
+    for (const tcg of Object.keys(data)) {
+      for (const section of Object.keys(data[tcg])) {
+        for (const item of data[tcg][section]) {
+          rows.push({
+            id:          item.id,
+            tcg:         tcg,
+            section:     section,
+            type:        item.type,
+            name:        item.name,
+            card_number: item.cardNumber || null,
+            set_name:    item.setName || null,
+            condition:   item.condition || null,
+            lang:        item.lang || null,
+            value:       parseFloat(item.value) || 0,
+            purchase:    item.purchase ? parseFloat(item.purchase) : null,
+            img_data:    item.imgData || null
+          });
+        }
+      }
+    }
+    if (rows.length > 0) {
+      const { error } = await sb.from('items').upsert(rows, { onConflict: 'id' });
+      if (error) throw error;
+    }
+  } catch(e) {
+    console.error('saveData Fehler:', e);
+  }
+}
+
+async function deleteItemFromDb(id) {
+  try {
+    const { error } = await sb.from('items').delete().eq('id', id);
+    if (error) throw error;
+  } catch(e) {
+    console.error('deleteItem Fehler:', e);
+  }
+}
 
 function getItems(t, s) { if (!data[t]) data[t] = {}; if (!data[t][s]) data[t][s] = []; return data[t][s]; }
 
@@ -1339,10 +1408,12 @@ function switchTcg(tcg) {
 }
 
 // Override deleteItem for new UI
-function deleteItem(idx) {
+async function deleteItem(idx) {
   if (!confirm('Item wirklich löschen?')) return;
-  getItems(state.activeTcg, state.activeSection).splice(idx, 1);
-  saveData();
+  const items = getItems(state.activeTcg, state.activeSection);
+  const item = items[idx];
+  if (item && item.id) await deleteItemFromDb(item.id);
+  items.splice(idx, 1);
   state.selectedIdx = null;
   closeDetail();
   renderAll();
