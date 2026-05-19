@@ -163,7 +163,6 @@ body.app-active.tcg-yg .mobile-header { background: rgba(18,21,38,0.8); backdrop
 /* Splash auf Smartphones: Vollbild mit Randabstand */
 @media (max-width: 768px) {
   #splash {
-    /* Hintergrundfarbe passend zum Bild (dunkelblau) */
     background: #0c1828;
   }
   #splash::before {
@@ -371,8 +370,6 @@ body.app-active.tcg-yg .mobile-header { background: rgba(18,21,38,0.8); backdrop
   display: flex; align-items: center; justify-content: center; overflow: hidden;
   position: relative;
 }
-.card-img-box.sealed { aspect-ratio: 16/10; }
-.card-img-box.graded { aspect-ratio: 3/4; }
 .card-img-box img { width: 100%; height: 100%; object-fit: cover; }
 .card-img-box .placeholder { font-size: 28px; color: rgba(255,255,255,0.07); }
 .card-tile-body { padding: 10px; display: flex; flex-direction: column; gap: 2px; }
@@ -552,8 +549,8 @@ body.app-active.tcg-yg .mobile-header { background: rgba(18,21,38,0.8); backdrop
 }
 .img-upload-area:hover { border-color: var(--accent-glow); }
 .img-upload-area.card-raw { aspect-ratio: 2/3; }
-.img-upload-area.card-graded { aspect-ratio: 3/4; }
-.img-upload-area.sealed { aspect-ratio: 16/9; }
+.img-upload-area.card-graded { aspect-ratio: 2/3; }
+.img-upload-area.sealed { aspect-ratio: 2/3; }
 .img-upload-area .up-icon { font-size: 22px; color: rgba(255,255,255,0.15); margin-bottom: 6px; }
 .img-upload-area p { font-size: 9px; color: rgba(255,255,255,0.2); }
 .img-upload-area img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
@@ -935,6 +932,18 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
         <label class="form-label">Name des Items</label>
         <input type="text" class="form-control" id="f_name" placeholder="z.B. Glurak ex Special Art" required>
       </div>
+      <div class="form-group" id="rarityGroup">
+        <label class="form-label">Rarität</label>
+        <select class="form-control" id="f_rarity">
+          <option value="">— keine Angabe —</option>
+          <option value="Unlimited">Unlimited</option>
+          <option value="1. Edition">1. Edition</option>
+          <option value="SAR">SAR</option>
+          <option value="IR">IR</option>
+          <option value="Reverse Holo">Reverse Holo</option>
+          <option value="Holo">Holo</option>
+        </select>
+      </div>
       <div class="form-group" id="cardNumberGroup">
         <label class="form-label">Nummer der Karte</label>
         <input type="text" class="form-control mono" id="f_cardnumber" placeholder="z.B. 199/165">
@@ -1026,7 +1035,7 @@ const POKEMON_SETS = [
   { name: "Schwert & Schild – Pokémon GO", year: "2022", code: "PGO" },
   { name: "Schwert & Schild – Strahlende Sterne", year: "2022", code: "BRS" },
   { name: "Schwert & Schild – Fusionsangriff", year: "2021", code: "FST" },
-  { name: "Schwert & Schild – Evolutions im Weltraum", year: "2021", code: "EVS" },
+  { name: "Schwert & Schild – Drachenwandel", year: "2021", code: "EVS" },
   { name: "Schwert & Schild – Chilling Reign", year: "2021", code: "CRE" },
   { name: "Schwert & Schild – Battle Styles", year: "2021", code: "BST" },
   { name: "Schwert & Schild – Shining Fates", year: "2021", code: "SHF" },
@@ -1108,6 +1117,9 @@ const POKEMON_SETS = [
   { name: "EX – Dragon", year: "2003", code: "DR" },
   { name: "EX – Sandstorm", year: "2003", code: "SS" },
   { name: "EX – Ruby & Sapphire", year: "2003", code: "RS" },
+  { name: "Skyridge", year: "2003", code: "SK" },
+  { name: "Aquapolis", year: "2003", code: "AQ" },
+  { name: "Expedition Base Set", year: "2002", code: "EXP" },
   { name: "Legendary Collection", year: "2002", code: "LC" },
   { name: "Neo Destiny", year: "2002", code: "N4" },
   { name: "Neo Revelation", year: "2001", code: "N3" },
@@ -1284,6 +1296,7 @@ async function loadData() {
         name:       row.name,
         cardNumber: row.card_number,
         setName:    row.set_name,
+        rarity:     row.rarity,
         condition:  row.condition,
         lang:       row.lang,
         value:      row.value,
@@ -1298,7 +1311,6 @@ async function loadData() {
 }
 
 async function saveData() {
-  // Komplett-Sync: nur als Fallback. Schreibt ALLE Items.
   try {
     const rows = [];
     for (const tcg of Object.keys(data)) {
@@ -1327,6 +1339,7 @@ function itemToRow(item, tcg, section) {
     name:        item.name,
     card_number: item.cardNumber || null,
     set_name:    item.setName || null,
+    rarity:      item.rarity || null,
     condition:   item.condition || null,
     lang:        item.lang || null,
     value:       parseFloat(item.value) || 0,
@@ -1411,8 +1424,6 @@ function getCondition(type) {
   return document.getElementById("f_cond")?.value||"";
 }
 
-// Bildkomprimierung: skaliert auf max. MAX_DIM Pixel Kantenlänge,
-// konvertiert zu JPEG mit gegebener Qualität.
 function compressImage(file, maxDim = 1200, quality = 0.75) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1422,7 +1433,6 @@ function compressImage(file, maxDim = 1200, quality = 0.75) {
       img.onerror = () => reject(new Error('Bild konnte nicht geladen werden'));
       img.onload = () => {
         let { width, height } = img;
-        // Auf maxDim Kantenlänge skalieren (proportional)
         if (width > maxDim || height > maxDim) {
           if (width > height) {
             height = Math.round(height * (maxDim / width));
@@ -1437,7 +1447,6 @@ function compressImage(file, maxDim = 1200, quality = 0.75) {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        // Als JPEG komprimieren (PNG ist viel größer)
         const dataUrl = canvas.toDataURL('image/jpeg', quality);
         resolve(dataUrl);
       };
@@ -1450,12 +1459,10 @@ function compressImage(file, maxDim = 1200, quality = 0.75) {
 async function previewImg(e) {
   const file = e.target.files[0]; if (!file) return;
   const ua = document.getElementById("uploadArea");
-  // Visuelles Feedback während Komprimierung
   ua.style.opacity = '0.5';
   try {
     imgBase64 = await compressImage(file, 1200, 0.75);
     updateUploadPreview(imgBase64);
-    // Optional: Größe im Log
     const kb = Math.round(imgBase64.length * 0.75 / 1024);
     console.log(`Bild komprimiert: ~${kb} KB`);
   } catch(err) {
@@ -1483,6 +1490,7 @@ async function saveItem(e) {
     type, name,
     cardNumber: document.getElementById("f_cardnumber").value.trim(),
     setName: document.getElementById("f_set_name").value,
+    rarity: document.getElementById("f_rarity")?.value || "",
     condition: getCondition(type),
     lang: document.getElementById("f_lang").value,
     value: document.getElementById("f_value").value,
@@ -1547,6 +1555,7 @@ function showDetail(idx) {
       <div class="detail-field"><div class="detail-field-label">Sprache</div><div class="detail-field-val">${item.lang}</div></div>
       ${item.cardNumber?`<div class="detail-field"><div class="detail-field-label">Kartennummer</div><div class="detail-field-val mono">${item.cardNumber}</div></div>`:""}
       ${item.setName?`<div class="detail-field"><div class="detail-field-label">Set</div><div class="detail-field-val" style="font-size:11px">${item.setName}</div></div>`:""}
+      ${item.rarity?`<div class="detail-field"><div class="detail-field-label">Rarität</div><div class="detail-field-val">${item.rarity}</div></div>`:""}
       <div class="detail-field"><div class="detail-field-label">Zustand</div><div class="detail-field-val">${item.condition}</div></div>
       ${item.purchase?`<div class="detail-field"><div class="detail-field-label">Einkaufspreis</div><div class="detail-field-val">${parseFloat(item.purchase).toFixed(2)} €</div></div>`:""}
     </div>
@@ -1773,6 +1782,7 @@ function showDetailPanel(idx) {
       <div class="dfield"><div class="dfield-label">Sprache</div><div class="dfield-val">${item.lang||'—'}</div></div>
       ${item.cardNumber ? `<div class="dfield"><div class="dfield-label">Kartennummer</div><div class="dfield-val mono">${item.cardNumber}</div></div>` : ''}
       ${item.setName ? `<div class="dfield"><div class="dfield-label">Set</div><div class="dfield-val" style="font-size:10px">${item.setName}</div></div>` : ''}
+      ${item.rarity ? `<div class="dfield"><div class="dfield-label">Rarität</div><div class="dfield-val">${item.rarity}</div></div>` : ''}
       <div class="dfield"><div class="dfield-label">Zustand</div><div class="dfield-val">${item.condition||'—'}</div></div>
       ${item.purchase ? `<div class="dfield"><div class="dfield-label">Einkaufspreis</div><div class="dfield-val">${parseFloat(item.purchase).toFixed(2)} €</div></div>` : ''}
     </div>
