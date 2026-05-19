@@ -1606,7 +1606,7 @@ async function saveItem(e) {
   };
   const tcg = state.activeTcg, section = state.activeSection;
   getItems(tcg, section).push(item);
-  closeFormModal(); renderContent(); updateTotalValue();
+  closeFormModal(); renderAll(); updateTotalValue();
   showSaveStatus('Speichere…');
   const ok = await saveOneItem(item, tcg, section);
   if (ok) {
@@ -1637,7 +1637,7 @@ async function updateItemValue(idx, newValue) {
   }
   item.value = String(val);
   item.valueHistory = history;
-  renderContent(); updateTotalValue();
+  renderAll(); updateTotalValue();
   // Detail-Ansicht neu rendern
   if (typeof showDetailPanel === 'function' && document.getElementById('detailPanel') && !document.getElementById('detailPanel').classList.contains('hidden')) {
     showDetailPanel(idx);
@@ -1812,7 +1812,7 @@ async function deleteItem(idx) {
   const item = items[idx];
   if (!item) return;
   items.splice(idx, 1);
-  closeDetailModal(); renderContent(); updateTotalValue();
+  closeDetailModal(); renderAll(); updateTotalValue();
   showSaveStatus('Lösche…');
   try {
     await deleteItemFromDb(item.id);
