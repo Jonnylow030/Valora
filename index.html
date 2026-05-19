@@ -1041,6 +1041,20 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
         <label class="form-label">Kaufdatum</label>
         <input type="date" class="form-control" id="f_purchase_date">
       </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Versandkosten (€)</label>
+          <input type="number" class="form-control" id="f_shipping" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Aufbereitungskosten (€)</label>
+          <input type="number" class="form-control" id="f_refurb" placeholder="0.00" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="form-group" id="gradingCostGroup" style="display:none">
+        <label class="form-label">Gradingkosten (€)</label>
+        <input type="number" class="form-control" id="f_grading_cost" placeholder="0.00" step="0.01" min="0">
+      </div>
       <div class="form-group">
         <label class="form-label">Bild hochladen</label>
         <div class="img-upload-area card-raw" id="uploadArea" onclick="document.getElementById('f_img').click()">
@@ -1060,6 +1074,43 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
         </div>
       </div>
       <button type="submit" class="submit-btn" id="formSubmitBtn">Item speichern</button>
+    </form>
+  </div>
+</div>
+
+<!-- EDIT-COSTS-MODAL: nachträgliche Bearbeitung der Kostenfelder -->
+<div class="modal-overlay" id="editCostsModal" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span>Kosten bearbeiten</span>
+      <button class="modal-close" onclick="closeEditCostsModal()" aria-label="Schließen"><i class="ti ti-x"></i></button>
+    </div>
+    <form onsubmit="saveEditCosts(event)">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Einkaufspreis (€)</label>
+          <input type="number" class="form-control" id="ec_purchase" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kaufdatum</label>
+          <input type="date" class="form-control" id="ec_purchase_date">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Versandkosten (€)</label>
+          <input type="number" class="form-control" id="ec_shipping" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Aufbereitungskosten (€)</label>
+          <input type="number" class="form-control" id="ec_refurb" placeholder="0.00" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="form-group" id="ec_gradingGroup">
+        <label class="form-label">Gradingkosten (€)</label>
+        <input type="number" class="form-control" id="ec_grading" placeholder="0.00" step="0.01" min="0">
+      </div>
+      <button type="submit" class="submit-btn">Speichern</button>
     </form>
   </div>
 </div>
@@ -1365,6 +1416,9 @@ async function loadData() {
         value:        row.value,
         purchase:     row.purchase,
         purchaseDate: row.purchase_date,
+        shippingCost: row.shipping_cost,
+        refurbCost:   row.refurb_cost,
+        gradingCost:  row.grading_cost,
         valueHistory: row.value_history,
         imgData:      row.img_data
       });
@@ -1410,6 +1464,9 @@ function itemToRow(item, tcg, section) {
     value:         parseFloat(item.value) || 0,
     purchase:      item.purchase ? parseFloat(item.purchase) : null,
     purchase_date: item.purchaseDate || null,
+    shipping_cost: item.shippingCost ? parseFloat(item.shippingCost) : null,
+    refurb_cost:   item.refurbCost ? parseFloat(item.refurbCost) : null,
+    grading_cost:  item.gradingCost ? parseFloat(item.gradingCost) : null,
     value_history: item.valueHistory || null,
     img_data:      item.imgData || null
   };
@@ -1493,6 +1550,9 @@ function onTypeChange() {
   const cw = document.getElementById("condWrapper");
   const isCard = type==="Karte RAW"||type==="Karte Graded";
   document.getElementById("cardNumberGroup").style.display = isCard ? "block" : "none";
+  // Gradingkosten nur bei Karte Graded
+  const gcGroup = document.getElementById("gradingCostGroup");
+  if (gcGroup) gcGroup.style.display = (type==="Karte Graded") ? "block" : "none";
   if (type==="Karte RAW") {
     cw.innerHTML = `<select class="form-control" id="f_cond"><option>Mint</option><option>Near Mint</option><option>Excellent</option><option>Good</option><option>Light Played</option><option>Played</option><option>Poor</option></select>`;
   } else if (type==="Karte Graded") {
@@ -1601,6 +1661,9 @@ async function saveItem(e) {
     value: currentValue,
     purchase: purchasePrice,
     purchaseDate: purchaseDate || null,
+    shippingCost: document.getElementById("f_shipping")?.value || "",
+    refurbCost: document.getElementById("f_refurb")?.value || "",
+    gradingCost: document.getElementById("f_grading_cost")?.value || "",
     valueHistory: history.length > 0 ? history : null,
     imgData: imgBase64, id: newId
   };
@@ -1666,6 +1729,63 @@ function promptNewValue(idx) {
   updateItemValue(idx, normalized);
 }
 
+// Modal zum Bearbeiten der Kostenfelder eines bestehenden Items
+function openEditCostsModal(idx) {
+  const items = getItems(state.activeTcg, state.activeSection);
+  const item = items[idx];
+  if (!item) return;
+  state.editingIdx = idx;
+  // Werte vorbelegen
+  document.getElementById('ec_purchase').value = item.purchase ?? '';
+  document.getElementById('ec_purchase_date').value = item.purchaseDate || '';
+  document.getElementById('ec_shipping').value = item.shippingCost ?? '';
+  document.getElementById('ec_refurb').value = item.refurbCost ?? '';
+  document.getElementById('ec_grading').value = item.gradingCost ?? '';
+  // Gradingkosten-Feld nur bei Karte Graded zeigen
+  document.getElementById('ec_gradingGroup').style.display =
+    (item.type === 'Karte Graded') ? 'block' : 'none';
+  document.getElementById('editCostsModal').style.display = 'flex';
+}
+
+function closeEditCostsModal() {
+  document.getElementById('editCostsModal').style.display = 'none';
+  state.editingIdx = null;
+}
+
+async function saveEditCosts(e) {
+  e.preventDefault();
+  const idx = state.editingIdx;
+  if (idx === null || idx === undefined) return;
+  const items = getItems(state.activeTcg, state.activeSection);
+  const item = items[idx];
+  if (!item) return;
+  item.purchase     = document.getElementById('ec_purchase').value || '';
+  item.purchaseDate = document.getElementById('ec_purchase_date').value || null;
+  item.shippingCost = document.getElementById('ec_shipping').value || '';
+  item.refurbCost   = document.getElementById('ec_refurb').value || '';
+  item.gradingCost  = document.getElementById('ec_grading').value || '';
+  closeEditCostsModal();
+  // Detail-Ansicht neu zeichnen
+  if (document.getElementById('detailModal') && document.getElementById('detailModal').style.display === 'flex') {
+    showDetail(idx);
+  }
+  if (typeof showDetailPanel === 'function' && document.getElementById('detailPanel') && !document.getElementById('detailPanel').classList.contains('hidden')) {
+    showDetailPanel(idx);
+  }
+  renderAll(); updateTotalValue();
+  showSaveStatus('Speichere…');
+  const ok = await saveOneItem(item, state.activeTcg, state.activeSection);
+  showSaveStatus(ok ? 'Gespeichert ✓' : 'Fehler beim Speichern!', !ok);
+}
+
+// Gesamtkosten eines Items berechnen
+function totalCosts(item) {
+  return (parseFloat(item.purchase)||0) +
+         (parseFloat(item.shippingCost)||0) +
+         (parseFloat(item.refurbCost)||0) +
+         (parseFloat(item.gradingCost)||0);
+}
+
 function populateSetDropdown() {
   const sets = TCG_CONFIG[state.activeTcg].sets;
   document.getElementById("setDropdown").innerHTML = sets.map(s =>
@@ -1701,16 +1821,18 @@ function selectSet(name) {
 function showDetail(idx) {
   const item = getItems(state.activeTcg, state.activeSection)[idx]; if (!item) return;
   document.getElementById("detailModalTitle").textContent = item.name;
-  const profit = (parseFloat(item.value)||0)-(parseFloat(item.purchase)||0);
-  const hasProfit = item.purchase && parseFloat(item.purchase)>0;
+  const costs = totalCosts(item);
+  const profit = (parseFloat(item.value)||0) - costs;
+  const hasCosts = costs > 0;
   const hasHistory = Array.isArray(item.valueHistory) && item.valueHistory.length >= 1;
   const chartId = "detailChart_" + idx;
   const fmtDate = (d) => { if (!d) return ''; const dt = new Date(d); return isNaN(dt) ? d : dt.toLocaleDateString('de-DE'); };
   document.getElementById("detailContent").innerHTML = `
     ${item.imgData?`<div class="detail-img-wrap"><img class="detail-img" src="${item.imgData}" alt="${item.name}"></div>`:""}
     <div class="detail-value">${parseFloat(item.value).toFixed(2)} €</div>
-    ${hasProfit?`<div class="detail-profit" style="color:${profit>=0?"#4ade80":"#f87171"};margin-bottom:14px">${profit>=0?"▲":"▼"} ${Math.abs(profit).toFixed(2)} € ${profit>=0?"Gewinn":"Verlust"} · EK: ${parseFloat(item.purchase).toFixed(2)} €</div>`:""}
+    ${hasCosts?`<div class="detail-profit" style="color:${profit>=0?"#4ade80":"#f87171"};margin-bottom:14px">${profit>=0?"▲":"▼"} ${Math.abs(profit).toFixed(2)} € ${profit>=0?"Gewinn":"Verlust"} · Gesamtkosten: ${costs.toFixed(2)} €</div>`:""}
     <button class="update-value-btn" onclick="promptNewValue(${idx})"><i class="ti ti-trending-up"></i> Aktuellen Wert aktualisieren</button>
+    <button class="update-value-btn" onclick="openEditCostsModal(${idx})" style="margin-top:-6px"><i class="ti ti-edit"></i> Kosten bearbeiten</button>
     ${hasHistory?`<div class="value-chart-wrap"><div class="value-chart-label">Wertverlauf</div><div class="value-chart-canvas-wrap"><canvas id="${chartId}"></canvas></div></div>`:""}
     <div class="detail-grid">
       <div class="detail-field"><div class="detail-field-label">Art</div><div class="detail-field-val">${item.type}</div></div>
@@ -1721,6 +1843,9 @@ function showDetail(idx) {
       <div class="detail-field"><div class="detail-field-label">Zustand</div><div class="detail-field-val">${item.condition}</div></div>
       ${item.purchase?`<div class="detail-field"><div class="detail-field-label">Einkaufspreis</div><div class="detail-field-val">${parseFloat(item.purchase).toFixed(2)} €</div></div>`:""}
       ${item.purchaseDate?`<div class="detail-field"><div class="detail-field-label">Kaufdatum</div><div class="detail-field-val">${fmtDate(item.purchaseDate)}</div></div>`:""}
+      ${item.shippingCost?`<div class="detail-field"><div class="detail-field-label">Versand</div><div class="detail-field-val">${parseFloat(item.shippingCost).toFixed(2)} €</div></div>`:""}
+      ${item.refurbCost?`<div class="detail-field"><div class="detail-field-label">Aufbereitung</div><div class="detail-field-val">${parseFloat(item.refurbCost).toFixed(2)} €</div></div>`:""}
+      ${item.gradingCost?`<div class="detail-field"><div class="detail-field-label">Grading</div><div class="detail-field-val">${parseFloat(item.gradingCost).toFixed(2)} €</div></div>`:""}
     </div>
     <button class="delete-btn" onclick="deleteItem(${idx})"><i class="ti ti-trash" aria-hidden="true"></i> Item löschen</button>`;
   document.getElementById("detailModal").style.display = "flex";
@@ -2008,8 +2133,9 @@ function showDetailPanel(idx) {
   if (!item) return;
   const panel = document.getElementById('detailPanel');
   panel.classList.remove('hidden');
-  const profit = (parseFloat(item.value)||0) - (parseFloat(item.purchase)||0);
-  const hasProfit = item.purchase && parseFloat(item.purchase) > 0;
+  const costs = totalCosts(item);
+  const profit = (parseFloat(item.value)||0) - costs;
+  const hasCosts = costs > 0;
   const hasHistory = Array.isArray(item.valueHistory) && item.valueHistory.length >= 1;
   const chartId = "panelChart_" + idx;
   const fmtDate = (d) => { if (!d) return ''; const dt = new Date(d); return isNaN(dt) ? d : dt.toLocaleDateString('de-DE'); };
@@ -2019,9 +2145,10 @@ function showDetailPanel(idx) {
     ${item.imgData ? `<div class="detail-img-wrap"><img class="detail-img" src="${item.imgData}" alt="${item.name}"></div>` : ''}
     <div class="detail-value-row">
       <div class="detail-value">${parseFloat(item.value).toFixed(2)} €</div>
-      ${hasProfit ? `<div class="detail-profit" style="color:${profit>=0?'#4ade80':'#f87171'}">${profit>=0?'▲':'▼'} ${Math.abs(profit).toFixed(2)} € ${profit>=0?'Gewinn':'Verlust'} · EK: ${parseFloat(item.purchase).toFixed(2)} €</div>` : ''}
+      ${hasCosts ? `<div class="detail-profit" style="color:${profit>=0?'#4ade80':'#f87171'}">${profit>=0?'▲':'▼'} ${Math.abs(profit).toFixed(2)} € ${profit>=0?'Gewinn':'Verlust'} · Gesamtkosten: ${costs.toFixed(2)} €</div>` : ''}
     </div>
     <button class="update-value-btn" onclick="promptNewValue(${idx})"><i class="ti ti-trending-up"></i> Aktuellen Wert aktualisieren</button>
+    <button class="update-value-btn" onclick="openEditCostsModal(${idx})" style="margin-top:-6px"><i class="ti ti-edit"></i> Kosten bearbeiten</button>
     ${hasHistory?`<div class="value-chart-wrap"><div class="value-chart-label">Wertverlauf</div><div class="value-chart-canvas-wrap"><canvas id="${chartId}"></canvas></div></div>`:""}
     <div class="detail-fields">
       <div class="dfield"><div class="dfield-label">Art des Items</div><div class="dfield-val">${item.type}</div></div>
@@ -2032,6 +2159,9 @@ function showDetailPanel(idx) {
       <div class="dfield"><div class="dfield-label">Zustand</div><div class="dfield-val">${item.condition||'—'}</div></div>
       ${item.purchase ? `<div class="dfield"><div class="dfield-label">Einkaufspreis</div><div class="dfield-val">${parseFloat(item.purchase).toFixed(2)} €</div></div>` : ''}
       ${item.purchaseDate ? `<div class="dfield"><div class="dfield-label">Kaufdatum</div><div class="dfield-val">${fmtDate(item.purchaseDate)}</div></div>` : ''}
+      ${item.shippingCost ? `<div class="dfield"><div class="dfield-label">Versand</div><div class="dfield-val">${parseFloat(item.shippingCost).toFixed(2)} €</div></div>` : ''}
+      ${item.refurbCost ? `<div class="dfield"><div class="dfield-label">Aufbereitung</div><div class="dfield-val">${parseFloat(item.refurbCost).toFixed(2)} €</div></div>` : ''}
+      ${item.gradingCost ? `<div class="dfield"><div class="dfield-label">Grading</div><div class="dfield-val">${parseFloat(item.gradingCost).toFixed(2)} €</div></div>` : ''}
     </div>
     <div class="detail-tags-section">
       <div class="detail-tags-label">Tags</div>
