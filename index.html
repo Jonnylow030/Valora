@@ -372,6 +372,18 @@ body.app-active.tcg-yg .mobile-header { background: rgba(18,21,38,0.8); backdrop
   font-family: 'Sora', sans-serif; font-size: 11px; font-weight: 500;
   cursor: pointer; outline: none; appearance: none;
 }
+.search-input {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04); color: var(--text);
+  font-family: 'Sora', sans-serif; font-size: 11px; font-weight: 500;
+  outline: none; min-width: 200px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.search-input:focus {
+  border-color: var(--accent-glow);
+  background: rgba(255,255,255,0.06);
+}
+.search-input::placeholder { color: var(--text-3); }
 
 /* ===== STATS BAR ===== */
 .stats-bar {
@@ -806,6 +818,7 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
     display: flex; gap: 6px;
   }
   .sort-select { flex: 1; min-height: 40px; font-size: 12px; }
+  .search-input { flex: 1 1 100%; min-height: 40px; font-size: 12px; min-width: 0; }
   .topbar-btn { min-height: 40px; padding: 8px 12px; font-size: 11px; }
   /* "Item hinzufügen"-Button in Topbar verstecken (FAB übernimmt) */
   .topbar-btn.primary { display: none !important; }
@@ -1031,10 +1044,13 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
     <div class="main-topbar">
       <div class="section-tabs-row" id="sectionTabs"></div>
       <div class="topbar-right">
+        <input type="search" class="search-input" id="searchInput" placeholder="Suche nach Name…" oninput="renderCards()">
         <select class="sort-select" id="sortSelect" onchange="renderCards()">
           <option value="val-desc">Sortieren: Wert (hoch → niedrig)</option>
           <option value="val-asc">Sortieren: Wert (niedrig → hoch)</option>
-          <option value="name">Sortieren: Name</option>
+          <option value="name">Sortieren: Name (A → Z)</option>
+          <option value="name-desc">Sortieren: Name (Z → A)</option>
+          <option value="type">Sortieren: Art des Items</option>
         </select>
         <button class="topbar-btn" id="exportBtn" onclick="exportToWord()" style="display:none"><i class="ti ti-file-word"></i> Export</button>
         <button class="topbar-btn primary" onclick="openFormModal()"><i class="ti ti-plus"></i> Item hinzufügen</button>
@@ -2255,20 +2271,32 @@ function renderStats() {
 function getSortedItems() {
   const items = getItems(state.activeTcg, state.activeSection);
   const sort = document.getElementById('sortSelect')?.value || 'val-desc';
-  const arr = [...items.entries()];
+  const q = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+  let arr = [...items.entries()];
+  // Filter nach Suchstring (Name)
+  if (q) {
+    arr = arr.filter(([, item]) => (item.name || '').toLowerCase().includes(q));
+  }
+  // Sortierung
   if (sort === 'val-desc') arr.sort((a,b) => (parseFloat(b[1].value)||0) - (parseFloat(a[1].value)||0));
   else if (sort === 'val-asc') arr.sort((a,b) => (parseFloat(a[1].value)||0) - (parseFloat(b[1].value)||0));
-  else arr.sort((a,b) => a[1].name.localeCompare(b[1].name));
+  else if (sort === 'name-desc') arr.sort((a,b) => (b[1].name||'').localeCompare(a[1].name||''));
+  else if (sort === 'type') arr.sort((a,b) => {
+    const t = (a[1].type||'').localeCompare(b[1].type||'');
+    return t !== 0 ? t : (a[1].name||'').localeCompare(b[1].name||'');
+  });
+  else arr.sort((a,b) => (a[1].name||'').localeCompare(b[1].name||''));
   return arr; // [originalIdx, item]
 }
 
 function renderCards() {
   const arr = getSortedItems();
   const grid = document.getElementById('cardsGrid');
+  const q = (document.getElementById('searchInput')?.value || '').trim();
   if (!arr.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
-      <i class="ti ti-cards"></i>
-      <p>Noch keine Items vorhanden.<br>Füge dein erstes Item hinzu!</p>
+      <i class="ti ${q ? 'ti-search-off' : 'ti-cards'}"></i>
+      <p>${q ? `Keine Items mit „${q}" gefunden.` : 'Noch keine Items vorhanden.<br>Füge dein erstes Item hinzu!'}</p>
     </div>`;
     return;
   }
