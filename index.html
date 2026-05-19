@@ -432,6 +432,23 @@ body.app-active.tcg-yg .mobile-header { background: rgba(18,21,38,0.8); backdrop
   overflow: hidden; cursor: pointer;
   transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
   display: flex; flex-direction: column;
+  position: relative;
+}
+.card-dup-btn {
+  position: absolute; top: 6px; right: 6px; z-index: 5;
+  width: 28px; height: 28px; padding: 0;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #fff; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0; transition: opacity 0.18s, background 0.15s;
+}
+.card-tile:hover .card-dup-btn { opacity: 1; }
+.card-dup-btn:hover { background: rgba(250,200,80,0.85); color: #000; }
+.card-dup-btn i { font-size: 14px; }
+/* Mobile: Button immer sichtbar (kein Hover) */
+@media (hover: none) {
+  .card-dup-btn { opacity: 1; }
 }
 .card-tile:hover {
   transform: translateY(-3px);
@@ -2074,6 +2091,7 @@ function showDetail(idx) {
       ${item.refurbCost?`<div class="detail-field"><div class="detail-field-label">Aufbereitung</div><div class="detail-field-val">${parseFloat(item.refurbCost).toFixed(2)} €</div></div>`:""}
       ${item.gradingCost?`<div class="detail-field"><div class="detail-field-label">Grading</div><div class="detail-field-val">${parseFloat(item.gradingCost).toFixed(2)} €</div></div>`:""}
     </div>
+    <button class="update-value-btn" onclick="duplicateItem(${idx})" style="margin-top:-6px;background:rgba(74,222,128,0.1);border-color:rgba(74,222,128,0.3);color:#4ade80"><i class="ti ti-copy"></i> Item duplizieren</button>
     <button class="delete-btn" onclick="deleteItem(${idx})"><i class="ti ti-trash" aria-hidden="true"></i> Item löschen</button>`;
   document.getElementById("detailModal").style.display = "flex";
   if (hasHistory) {
@@ -2337,6 +2355,7 @@ function renderCards() {
           <button class="lookup-btn" onclick="openMarketSearch(${origIdx}, event)" title="Auf ${marketLabel} suchen"><i class="ti ti-search"></i> ${marketLabel}</button>
         </div>` : '';
     return `<div class="card-tile ${selected?'selected':''}" onclick="selectCard(${origIdx})">
+      <button class="card-dup-btn" onclick="duplicateItem(${origIdx}, event)" title="Item duplizieren"><i class="ti ti-copy"></i></button>
       <div class="card-img-box ${boxCls}">${imgHtml}</div>
       <div class="card-tile-body">
         <div class="card-tile-name">${item.name}</div>
@@ -2430,6 +2449,7 @@ function showDetailPanel(idx) {
   `;
   document.getElementById('detailActions').innerHTML = `
     <button class="daction-btn" onclick="closeDetail()">Schließen</button>
+    <button class="daction-btn" onclick="duplicateItem(${idx})" style="color:#4ade80"><i class="ti ti-copy"></i> Duplizieren</button>
     <button class="daction-btn danger" onclick="deleteItem(${idx})"><i class="ti ti-trash"></i> Löschen</button>
   `;
   if (hasHistory) {
@@ -2474,6 +2494,28 @@ async function deleteItem(idx) {
 
 // Override closeDetailModal (for compatibility)
 function closeDetailModal() { closeDetail(); }
+
+// Item duplizieren: identische Kopie mit neuer ID anlegen
+async function duplicateItem(idx, evt) {
+  if (evt) evt.stopPropagation();
+  const items = getItems(state.activeTcg, state.activeSection);
+  const orig = items[idx];
+  if (!orig) return;
+  const newId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  // Tiefe Kopie der relevanten Felder
+  const copy = {
+    ...orig,
+    id: newId,
+    // valueHistory als neue Array-Referenz, damit Original nicht mitverändert wird
+    valueHistory: Array.isArray(orig.valueHistory) ? orig.valueHistory.map(h => ({...h})) : null
+  };
+  // Direkt nach dem Original einsortieren
+  items.splice(idx + 1, 0, copy);
+  renderAll(); updateTotalValue();
+  showSaveStatus('Dupliziere…');
+  const ok = await saveOneItem(copy, state.activeTcg, state.activeSection);
+  showSaveStatus(ok ? 'Dupliziert ✓' : 'Fehler beim Duplizieren!', !ok);
+}
 
 async function init() {
   await loadData();
