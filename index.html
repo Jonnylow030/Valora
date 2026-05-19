@@ -213,21 +213,53 @@ body.app-active.tcg-yg .mobile-header { background: rgba(18,21,38,0.8); backdrop
   letter-spacing: -0.3px;
   line-height: 1.1;
 }
+.profit-box {
+  background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+.profit-box-label {
+  font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-3); font-weight: 600; margin-bottom: 6px;
+}
+.profit-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 3px 0;
+  font-size: 11px;
+}
+.profit-row.total {
+  border-top: 1px solid var(--border);
+  margin-top: 4px; padding-top: 6px;
+  font-weight: 700; font-size: 12px;
+}
+.profit-row-name { color: var(--text-2); }
+.profit-row.total .profit-row-name { color: var(--text); }
+.profit-row-val {
+  font-family: 'Sora', sans-serif; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.profit-pos { color: #4ade80; }
+.profit-neg { color: #f87171; }
 .mobile-total-value {
   background: rgba(255,255,255,0.04);
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   display: flex; flex-direction: column;
-  margin-left: 10px;
+  margin-left: 6px;
+  flex: 1; min-width: 0;
 }
 .mobile-total-value-label {
-  font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+  font-size: 7px; letter-spacing: 1.2px; text-transform: uppercase;
   color: var(--text-3); font-weight: 600;
 }
 .mobile-total-value-amount {
   font-family: 'Sora', sans-serif;
-  font-size: 13px; font-weight: 700; color: var(--text);
+  font-size: 12px; font-weight: 700; color: var(--text);
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .sidebar-tagline {
   font-size: 8px; letter-spacing: 3px; text-transform: uppercase;
@@ -877,6 +909,10 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
       <div class="mobile-total-value-label">Gesamtwert</div>
       <div class="mobile-total-value-amount" id="totalValueAmountMobile">0,00 €</div>
     </div>
+    <div class="mobile-total-value">
+      <div class="mobile-total-value-label">Gewinn/Verlust</div>
+      <div class="mobile-total-value-amount" id="profitTotalMobile">—</div>
+    </div>
     <button class="mobile-home-btn" onclick="goHome()" aria-label="Zur Startseite"><i class="ti ti-home"></i></button>
   </div>
   <div class="mobile-tcg-tabs">
@@ -894,6 +930,13 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
       <div class="total-value-box">
         <div class="total-value-label">Gesamtwert Sammlung</div>
         <div class="total-value-amount" id="totalValueAmount">0,00 €</div>
+      </div>
+      <div class="profit-box">
+        <div class="profit-box-label">Gewinn / Verlust nach Kosten</div>
+        <div class="profit-row"><span class="profit-row-name">Pokémon</span><span class="profit-row-val" id="profitPk">—</span></div>
+        <div class="profit-row"><span class="profit-row-name">One Piece</span><span class="profit-row-val" id="profitOp">—</span></div>
+        <div class="profit-row"><span class="profit-row-name">Yu-Gi-Oh!</span><span class="profit-row-val" id="profitYg">—</span></div>
+        <div class="profit-row total"><span class="profit-row-name">Gesamt</span><span class="profit-row-val" id="profitTotal">—</span></div>
       </div>
     </div>
     <div class="sidebar-section-label">Trading Card Games</div>
@@ -1503,18 +1546,39 @@ function showSaveStatus(msg, isError = false) {
 // Gesamtwert aller TCGs berechnen und Anzeigen aktualisieren
 function updateTotalValue() {
   let total = 0;
+  const profits = { pk: 0, op: 0, yg: 0 };
   for (const tcg of Object.keys(data)) {
     for (const section of Object.keys(data[tcg])) {
       for (const item of data[tcg][section]) {
-        total += parseFloat(item.value) || 0;
+        const v = parseFloat(item.value) || 0;
+        total += v;
+        if (profits[tcg] !== undefined) {
+          profits[tcg] += v - totalCosts(item);
+        }
       }
     }
   }
-  const formatted = total.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  const fmt = (n) => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  const fmtSigned = (n) => (n >= 0 ? '+' : '−') + Math.abs(n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  // Gesamtwert
   const el1 = document.getElementById('totalValueAmount');
   const el2 = document.getElementById('totalValueAmountMobile');
-  if (el1) el1.textContent = formatted;
-  if (el2) el2.textContent = formatted;
+  if (el1) el1.textContent = fmt(total);
+  if (el2) el2.textContent = fmt(total);
+  // Profit pro TCG + Gesamt
+  const totalProfit = profits.pk + profits.op + profits.yg;
+  const setProfit = (id, val) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = fmtSigned(val);
+    el.classList.remove('profit-pos', 'profit-neg');
+    el.classList.add(val >= 0 ? 'profit-pos' : 'profit-neg');
+  };
+  setProfit('profitPk', profits.pk);
+  setProfit('profitOp', profits.op);
+  setProfit('profitYg', profits.yg);
+  setProfit('profitTotal', totalProfit);
+  setProfit('profitTotalMobile', totalProfit);
 }
 
 async function deleteItemFromDb(id) {
