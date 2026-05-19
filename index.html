@@ -1109,16 +1109,7 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
       </div>
       <div class="form-group" id="rarityGroup">
         <label class="form-label">Rarität <span class="form-hint" style="display:inline">(Mehrfachauswahl möglich)</span></label>
-        <div class="rarity-grid" id="f_rarity_grid">
-          <label class="rarity-chip"><input type="checkbox" value="Unlimited"><span>Unlimited</span></label>
-          <label class="rarity-chip"><input type="checkbox" value="1. Edition"><span>1. Edition</span></label>
-          <label class="rarity-chip"><input type="checkbox" value="Holo"><span>Holo</span></label>
-          <label class="rarity-chip"><input type="checkbox" value="Reverse Holo"><span>Reverse Holo</span></label>
-          <label class="rarity-chip"><input type="checkbox" value="Reverse Holo Stamp"><span>Reverse Holo Stamp</span></label>
-          <label class="rarity-chip"><input type="checkbox" value="IR"><span>IR</span></label>
-          <label class="rarity-chip"><input type="checkbox" value="SAR"><span>SAR</span></label>
-          <label class="rarity-chip"><input type="checkbox" value="Alternative Art"><span>Alternative Art</span></label>
-        </div>
+        <div class="rarity-grid" id="f_rarity_grid"></div>
       </div>
       <div class="form-group" id="cardNumberGroup">
         <label class="form-label">Nummer der Karte</label>
@@ -1675,10 +1666,39 @@ function openFormModal() {
   document.getElementById("formModalTitle").textContent = `Neues Item – ${cfg.label}`;
   document.getElementById("formSubmitBtn").className = `submit-btn ${cfg.submitCls}`;
   document.getElementById("purchaseGroup").style.display = secCfg.showPurchase ? "block" : "none";
+  populateRarityChips(state.activeTcg);
   onTypeChange();
   updateUploadPreview(null);
   populateSetDropdown();
   document.getElementById("formModal").style.display = "flex";
+}
+
+// Rarity-Optionen je TCG
+const RARITY_OPTIONS = {
+  pk: [
+    "Unlimited","1. Edition","Holo","Reverse Holo","Reverse Holo Stamp",
+    "IR","SAR","Alternative Art"
+  ],
+  op: [
+    "C (Common)","UC (Uncommon)","R (Rare)","L (Leader)",
+    "SR (Super Rare)","SEC (Secret Rare)","SP (Special Rare)",
+    "TR (Treasure Rare)","Alternate Art (AA)","Manga Rare","P (Promo)"
+  ],
+  yg: [
+    "Common","Rare","Super Rare","Ultra Rare","Ultimate Rare","Secret Rare",
+    "Gold Rare","Gold Secret Rare","Ghost Gold Rare","Ghost Rare",
+    "Starfoil Rare","Shatterfoil","Mosaic Rare","Parallel Rare",
+    "Colored Rare","Platinum Rare","Platinum Secret Rare"
+  ]
+};
+
+function populateRarityChips(tcg) {
+  const grid = document.getElementById('f_rarity_grid');
+  if (!grid) return;
+  const opts = RARITY_OPTIONS[tcg] || RARITY_OPTIONS.pk;
+  grid.innerHTML = opts.map(opt =>
+    `<label class="rarity-chip"><input type="checkbox" value="${opt}"><span>${opt}</span></label>`
+  ).join('');
 }
 
 function closeFormModal() { document.getElementById("formModal").style.display = "none"; }
