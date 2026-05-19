@@ -1296,26 +1296,13 @@ async function loadData() {
 }
 
 async function saveData() {
-  // Alle Items aus dem lokalen state sammeln und upserten
+  // Komplett-Sync: nur als Fallback. Schreibt ALLE Items.
   try {
     const rows = [];
     for (const tcg of Object.keys(data)) {
       for (const section of Object.keys(data[tcg])) {
         for (const item of data[tcg][section]) {
-          rows.push({
-            id:          item.id,
-            tcg:         tcg,
-            section:     section,
-            type:        item.type,
-            name:        item.name,
-            card_number: item.cardNumber || null,
-            set_name:    item.setName || null,
-            condition:   item.condition || null,
-            lang:        item.lang || null,
-            value:       parseFloat(item.value) || 0,
-            purchase:    item.purchase ? parseFloat(item.purchase) : null,
-            img_data:    item.imgData || null
-          });
+          rows.push(itemToRow(item, tcg, section));
         }
       }
     }
@@ -1325,16 +1312,61 @@ async function saveData() {
     }
   } catch(e) {
     console.error('saveData Fehler:', e);
+    throw e;
   }
 }
 
-async function deleteItemFromDb(id) {
+// Hilfsfunktion: Item-Objekt in DB-Row umwandeln
+function itemToRow(item, tcg, section) {
+  return {
+    id:          item.id,
+    tcg:         tcg,
+    section:     section,
+    type:        item.type,
+    name:        item.name,
+    card_number: item.cardNumber || null,
+    set_name:    item.setName || null,
+    condition:   item.condition || null,
+    lang:        item.lang || null,
+    value:       parseFloat(item.value) || 0,
+    purchase:    item.purchase ? parseFloat(item.purchase) : null,
+    img_data:    item.imgData || null
+  };
+}
+
+// Einzelnes Item speichern (schnell, da nur eine Row)
+async function saveOneItem(item, tcg, section) {
   try {
-    const { error } = await sb.from('items').delete().eq('id', id);
+    const row = itemToRow(item, tcg, section);
+    const { error } = await sb.from('items').upsert(row, { onConflict: 'id' });
     if (error) throw error;
+    return true;
   } catch(e) {
-    console.error('deleteItem Fehler:', e);
+    console.error('saveOneItem Fehler:', e);
+    return false;
   }
+}
+
+// Status-Anzeige für Speichervorgang
+function showSaveStatus(msg, isError = false) {
+  let el = document.getElementById('saveStatus');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'saveStatus';
+    el.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:opacity 0.3s';
+    document.body.appendChild(el);
+  }
+  el.style.background = isError ? '#dc2626' : '#16a34a';
+  el.style.color = '#fff';
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 2000);
+}
+
+async function deleteItemFromDb(id) {
+  const { error } = await sb.from('items').delete().eq('id', id);
+  if (error) throw error;
 }
 
 function getItems(t, s) { if (!data[t]) data[t] = {}; if (!data[t][s]) data[t][s] = []; return data[t][s]; }
@@ -1395,10 +1427,12 @@ function updateUploadPreview(src) {
   else { if(icon) icon.style.display=""; if(p) p.style.display=""; }
 }
 
-function saveItem(e) {
+async function saveItem(e) {
   e.preventDefault();
   const type = document.getElementById("f_type").value;
   const name = document.getElementById("f_name").value.trim(); if (!name) return;
+  // Eindeutige ID: timestamp + random
+  const newId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
   const item = {
     type, name,
     cardNumber: document.getElementById("f_cardnumber").value.trim(),
@@ -1407,10 +1441,20 @@ function saveItem(e) {
     lang: document.getElementById("f_lang").value,
     value: document.getElementById("f_value").value,
     purchase: document.getElementById("f_purchase")?.value||"",
-    imgData: imgBase64, id: Date.now()
+    imgData: imgBase64, id: newId
   };
-  getItems(state.activeTcg, state.activeSection).push(item);
-  saveData(); closeFormModal(); renderContent();
+  const tcg = state.activeTcg, section = state.activeSection;
+  // Optimistisch ins UI einfügen
+  getItems(tcg, section).push(item);
+  closeFormModal(); renderContent();
+  // Speichern und warten
+  showSaveStatus('Speichere…');
+  const ok = await saveOneItem(item, tcg, section);
+  if (ok) {
+    showSaveStatus('Gespeichert ✓');
+  } else {
+    showSaveStatus('Fehler beim Speichern!', true);
+  }
 }
 
 function populateSetDropdown() {
@@ -1468,10 +1512,20 @@ function showDetail(idx) {
 
 function closeDetailModal() { document.getElementById("detailModal").style.display = "none"; }
 
-function deleteItem(idx) {
+async function deleteItem(idx) {
   if (!confirm("Item wirklich löschen?")) return;
-  getItems(state.activeTcg, state.activeSection).splice(idx, 1);
-  saveData(); closeDetailModal(); renderContent();
+  const items = getItems(state.activeTcg, state.activeSection);
+  const item = items[idx];
+  if (!item) return;
+  items.splice(idx, 1);
+  closeDetailModal(); renderContent();
+  showSaveStatus('Lösche…');
+  try {
+    await deleteItemFromDb(item.id);
+    showSaveStatus('Gelöscht ✓');
+  } catch(e) {
+    showSaveStatus('Fehler beim Löschen!', true);
+  }
 }
 
 function exportToWord() {
