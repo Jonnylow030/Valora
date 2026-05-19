@@ -1316,7 +1316,6 @@ async function saveData() {
   }
 }
 
-// Hilfsfunktion: Item-Objekt in DB-Row umwandeln
 function itemToRow(item, tcg, section) {
   return {
     id:          item.id,
@@ -1334,7 +1333,6 @@ function itemToRow(item, tcg, section) {
   };
 }
 
-// Einzelnes Item speichern (schnell, da nur eine Row)
 async function saveOneItem(item, tcg, section) {
   try {
     const row = itemToRow(item, tcg, section);
@@ -1347,7 +1345,6 @@ async function saveOneItem(item, tcg, section) {
   }
 }
 
-// Status-Anzeige für Speichervorgang
 function showSaveStatus(msg, isError = false) {
   let el = document.getElementById('saveStatus');
   if (!el) {
@@ -1412,11 +1409,59 @@ function getCondition(type) {
   return document.getElementById("f_cond")?.value||"";
 }
 
-function previewImg(e) {
+// Bildkomprimierung: skaliert auf max. MAX_DIM Pixel Kantenlänge,
+// konvertiert zu JPEG mit gegebener Qualität.
+function compressImage(file, maxDim = 1200, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+    reader.onload = ev => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Bild konnte nicht geladen werden'));
+      img.onload = () => {
+        let { width, height } = img;
+        // Auf maxDim Kantenlänge skalieren (proportional)
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round(height * (maxDim / width));
+            width = maxDim;
+          } else {
+            width = Math.round(width * (maxDim / height));
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        // Als JPEG komprimieren (PNG ist viel größer)
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function previewImg(e) {
   const file = e.target.files[0]; if (!file) return;
-  const r = new FileReader();
-  r.onload = ev => { imgBase64 = ev.target.result; updateUploadPreview(imgBase64); };
-  r.readAsDataURL(file);
+  const ua = document.getElementById("uploadArea");
+  // Visuelles Feedback während Komprimierung
+  ua.style.opacity = '0.5';
+  try {
+    imgBase64 = await compressImage(file, 1200, 0.75);
+    updateUploadPreview(imgBase64);
+    // Optional: Größe im Log
+    const kb = Math.round(imgBase64.length * 0.75 / 1024);
+    console.log(`Bild komprimiert: ~${kb} KB`);
+  } catch(err) {
+    console.error('Komprimierung fehlgeschlagen:', err);
+    alert('Bild konnte nicht verarbeitet werden.');
+  } finally {
+    ua.style.opacity = '1';
+  }
 }
 
 function updateUploadPreview(src) {
@@ -1431,7 +1476,6 @@ async function saveItem(e) {
   e.preventDefault();
   const type = document.getElementById("f_type").value;
   const name = document.getElementById("f_name").value.trim(); if (!name) return;
-  // Eindeutige ID: timestamp + random
   const newId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
   const item = {
     type, name,
@@ -1444,10 +1488,8 @@ async function saveItem(e) {
     imgData: imgBase64, id: newId
   };
   const tcg = state.activeTcg, section = state.activeSection;
-  // Optimistisch ins UI einfügen
   getItems(tcg, section).push(item);
   closeFormModal(); renderContent();
-  // Speichern und warten
   showSaveStatus('Speichere…');
   const ok = await saveOneItem(item, tcg, section);
   if (ok) {
