@@ -196,6 +196,39 @@ body.app-active.tcg-yg .mobile-header { background: rgba(18,21,38,0.8); backdrop
 .sidebar-logo {
   width: 100%; max-width: 180px; height: auto;
 }
+.total-value-box {
+  background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.total-value-label {
+  font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-3); font-weight: 600; margin-bottom: 4px;
+}
+.total-value-amount {
+  font-family: 'Sora', sans-serif;
+  font-size: 20px; font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.3px;
+  line-height: 1.1;
+}
+.mobile-total-value {
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex; flex-direction: column;
+  margin-left: 10px;
+}
+.mobile-total-value-label {
+  font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--text-3); font-weight: 600;
+}
+.mobile-total-value-amount {
+  font-family: 'Sora', sans-serif;
+  font-size: 13px; font-weight: 700; color: var(--text);
+  line-height: 1.1;
+}
 .sidebar-tagline {
   font-size: 8px; letter-spacing: 3px; text-transform: uppercase;
   color: var(--text-3); margin-top: 4px; font-weight: 500;
@@ -819,7 +852,10 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
 <!-- MOBILE HEADER (nur auf kleinen Screens sichtbar) -->
 <div id="mobileHeader" class="mobile-header">
   <div class="mobile-header-top">
-    <div class="mobile-header-title">Trading Card Manager</div>
+    <div class="mobile-total-value">
+      <div class="mobile-total-value-label">Gesamtwert</div>
+      <div class="mobile-total-value-amount" id="totalValueAmountMobile">0,00 €</div>
+    </div>
     <button class="mobile-home-btn" onclick="goHome()" aria-label="Zur Startseite"><i class="ti ti-home"></i></button>
   </div>
   <div class="mobile-tcg-tabs">
@@ -834,8 +870,10 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
   <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <img class="sidebar-logo" src="splash.jpg" alt="Logo">
-      <div class="sidebar-tagline">Trading Card Manager</div>
+      <div class="total-value-box">
+        <div class="total-value-label">Gesamtwert Sammlung</div>
+        <div class="total-value-amount" id="totalValueAmount">0,00 €</div>
+      </div>
     </div>
     <div class="sidebar-section-label">Trading Card Games</div>
     <nav class="tcg-nav">
@@ -1376,6 +1414,23 @@ function showSaveStatus(msg, isError = false) {
   el._t = setTimeout(() => { el.style.opacity = '0'; }, 2000);
 }
 
+// Gesamtwert aller TCGs berechnen und Anzeigen aktualisieren
+function updateTotalValue() {
+  let total = 0;
+  for (const tcg of Object.keys(data)) {
+    for (const section of Object.keys(data[tcg])) {
+      for (const item of data[tcg][section]) {
+        total += parseFloat(item.value) || 0;
+      }
+    }
+  }
+  const formatted = total.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  const el1 = document.getElementById('totalValueAmount');
+  const el2 = document.getElementById('totalValueAmountMobile');
+  if (el1) el1.textContent = formatted;
+  if (el2) el2.textContent = formatted;
+}
+
 async function deleteItemFromDb(id) {
   const { error } = await sb.from('items').delete().eq('id', id);
   if (error) throw error;
@@ -1499,7 +1554,7 @@ async function saveItem(e) {
   };
   const tcg = state.activeTcg, section = state.activeSection;
   getItems(tcg, section).push(item);
-  closeFormModal(); renderContent();
+  closeFormModal(); renderContent(); updateTotalValue();
   showSaveStatus('Speichere…');
   const ok = await saveOneItem(item, tcg, section);
   if (ok) {
@@ -1571,7 +1626,7 @@ async function deleteItem(idx) {
   const item = items[idx];
   if (!item) return;
   items.splice(idx, 1);
-  closeDetailModal(); renderContent();
+  closeDetailModal(); renderContent(); updateTotalValue();
   showSaveStatus('Lösche…');
   try {
     await deleteItemFromDb(item.id);
@@ -1841,6 +1896,7 @@ function closeDetailModal() { closeDetail(); }
 
 async function init() {
   await loadData();
+  updateTotalValue();
 }
 init();
 </script>
