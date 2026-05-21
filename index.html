@@ -2354,34 +2354,35 @@ async function buildSalesCard(item) {
 
   const margin = 40;
   const imgTop = 70;
-  const maxImgH = 1180;     // maximaler Platz für Bilder
-  // Untergrenze des tatsächlich genutzten Bildbereichs (wird unten gesetzt)
+  // Geschätzte Höhe des Textblocks (Name + Details + Badges + Preis), damit wir
+  // den Bildbereich maximal groß machen können, ohne dass Text abgeschnitten wird.
+  const textBlockH = 430;
+  const maxImgH = H - imgTop - textBlockH;
   let imgBottom = imgTop;
 
   if (front && back) {
     const gap = 24, halfW = (W - margin*2 - gap) / 2;
-    // Tatsächliche Höhe je Karte aus dem schmaleren Slot ableiten,
-    // damit keine riesigen Ränder oben/unten entstehen.
     const ratioF = front.width / front.height;
     const ratioB = back.width / back.height;
-    const hF = halfW / ratioF;
-    const hB = halfW / ratioB;
-    const usedH = Math.min(maxImgH, Math.max(hF, hB));
-    // Karten zeichnen (contain in eine Box halfW x usedH)
+    // Höhe so wählen, dass beide Karten in ihre halbe Breite passen,
+    // aber den verfügbaren Platz möglichst ausnutzen.
+    const fitH = Math.max(halfW / ratioF, halfW / ratioB);
+    // Label-Platz (50px) berücksichtigen
+    const usedH = Math.min(maxImgH - 50, fitH);
     drawImageContain(ctx, front, margin, imgTop, halfW, usedH);
     drawImageContain(ctx, back, margin + halfW + gap, imgTop, halfW, usedH);
     imgBottom = imgTop + usedH;
-    // Labels mit Abstand DARUNTER (ragen nicht in den Namen, weil Name erst nach imgBottom kommt)
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '600 26px Sora, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('VORDERSEITE', margin + halfW/2, imgBottom + 42);
     ctx.fillText('RÜCKSEITE', margin + halfW + gap + halfW/2, imgBottom + 42);
-    imgBottom += 60; // Platz für die Labels
+    imgBottom += 56;
   } else if (front) {
     const ratio = front.width / front.height;
     const fullW = W - margin*2;
     const usedH = Math.min(maxImgH, fullW / ratio);
+    // Bild zentriert, falls schmaler als volle Breite
     drawImageContain(ctx, front, margin, imgTop, fullW, usedH);
     imgBottom = imgTop + usedH;
   } else {
@@ -2445,20 +2446,34 @@ async function buildSalesCard(item) {
     bx += tw + gapX;
   });
 
-  // Preis groß rechts unten – fester Abstand zu den Badges, aber mindestens am unteren Rand
-  const priceBaseline = Math.max(ty + 110, H - 70);
+  // Preis direkt unter den Badges (kompakt), Trennlinie darüber
+  ty += 60;
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(40, ty - 30);
+  ctx.lineTo(W - 40, ty - 30);
+  ctx.stroke();
+  ty += 60;
+
   const price = (parseFloat(item.value) || 0);
   const priceStr = price.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
   ctx.fillStyle = '#4ade80';
-  ctx.font = '800 90px Sora, sans-serif';
+  ctx.font = '800 96px Sora, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText(priceStr, W - 40, priceBaseline);
+  ctx.fillText(priceStr, W - 40, ty + 30);
 
-  // Valora-Branding unten links auf gleicher Höhe
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  // "Preis"-Label links neben dem Preis
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
   ctx.font = '600 30px Sora, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('Valora', 40, priceBaseline);
+  ctx.fillText('PREIS', 40, ty + 10);
+
+  // Valora-Branding ganz unten
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.font = '600 30px Sora, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Valora', 40, H - 50);
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
 }
