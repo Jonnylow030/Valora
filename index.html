@@ -628,6 +628,36 @@ body.app-active.tcg-yg .mobile-header { background: rgba(18,21,38,0.8); backdrop
 }
 .lookup-btn i { font-size: 13px; flex-shrink: 0; }
 
+/* Karten-Lookup (Pokémon-Namenssuche) */
+.name-search-wrap { display: flex; gap: 6px; }
+.name-search-wrap .form-control { flex: 1; }
+.name-search-btn {
+  flex-shrink: 0; width: 46px; border-radius: 8px;
+  background: var(--accent-dim); border: 1px solid var(--accent-glow);
+  color: var(--accent); cursor: pointer; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.name-search-btn:hover { background: var(--accent-glow); }
+.name-search-btn:disabled { opacity: 0.5; cursor: wait; }
+.card-lookup-results {
+  margin-top: 8px; display: none; flex-direction: column; gap: 6px;
+  max-height: 320px; overflow-y: auto;
+}
+.card-lookup-results.open { display: flex; }
+.lookup-result {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: 8px; cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  transition: all 0.15s;
+}
+.lookup-result:hover { background: rgba(31,180,201,0.12); border-color: var(--accent-glow); }
+.lookup-result img { width: 42px; height: 58px; object-fit: contain; border-radius: 4px; flex-shrink: 0; background: rgba(0,0,0,0.2); }
+.lookup-result-info { flex: 1; min-width: 0; }
+.lookup-result-name { font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lookup-result-meta { font-size: 10px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lookup-status { font-size: 11px; color: var(--text-2); padding: 6px 4px; }
+
 /* Rarity-Multi-Select als Chips */
 .rarity-grid {
   display: grid;
@@ -1155,7 +1185,11 @@ body:has(#app.show) .mobile-header { /* placeholder; eigentliche Regel in @media
       </div>
       <div class="form-group">
         <label class="form-label">Name des Items</label>
-        <input type="text" class="form-control" id="f_name" placeholder="z.B. Glurak ex Special Art" required>
+        <div class="name-search-wrap">
+          <input type="text" class="form-control" id="f_name" placeholder="z.B. Glurak ex Special Art" required>
+          <button type="button" class="name-search-btn" id="cardLookupBtn" onclick="lookupPokemonCard()" title="Karte in Pokémon-Datenbank suchen"><i class="ti ti-search"></i></button>
+        </div>
+        <div class="card-lookup-results" id="cardLookupResults"></div>
       </div>
       <div class="form-group" id="rarityGroup">
         <label class="form-label">Rarität <span class="form-hint" style="display:inline">(Mehrfachauswahl möglich)</span></label>
@@ -1748,6 +1782,11 @@ function openFormModal() {
   updateUploadPreview(null);
   updateUploadPreview(null, "uploadAreaBack");
   populateSetDropdown();
+  // Karten-Lookup-Button nur bei Pokémon anzeigen, Ergebnisliste zurücksetzen
+  const lookupBtn = document.getElementById('cardLookupBtn');
+  if (lookupBtn) lookupBtn.style.display = (state.activeTcg === 'pk') ? 'flex' : 'none';
+  const lookupRes = document.getElementById('cardLookupResults');
+  if (lookupRes) { lookupRes.className = 'card-lookup-results'; lookupRes.innerHTML = ''; }
   document.getElementById("formModal").style.display = "flex";
 }
 
@@ -1807,6 +1846,9 @@ function onTypeChange() {
   // Gradingkosten nur bei Karte Graded
   const gcGroup = document.getElementById("gradingCostGroup");
   if (gcGroup) gcGroup.style.display = (type==="Karte Graded") ? "block" : "none";
+  // Karten-Lookup nur bei Pokémon UND Kartentyp (RAW/Graded)
+  const lookupBtn = document.getElementById('cardLookupBtn');
+  if (lookupBtn) lookupBtn.style.display = (state.activeTcg === 'pk' && isCard) ? 'flex' : 'none';
   // Rarity-Chips passend zum Typ neu rendern
   populateRarityChips(state.activeTcg);
   if (type==="Karte RAW") {
@@ -2169,6 +2211,128 @@ function selectSet(name) {
   document.getElementById("setDropdown").classList.remove("open");
 }
 
+// ===== POKÉMON KARTEN-LOOKUP (kostenlose pokemontcg.io API) =====
+let _lookupResults = [];
+
+async function lookupPokemonCard() {
+  if (state.activeTcg !== 'pk') return; // nur Pokémon
+  const nameInput = document.getElementById('f_name');
+  const q = (nameInput?.value || '').trim();
+  const resultsEl = document.getElementById('cardLookupResults');
+  const btn = document.getElementById('cardLookupBtn');
+  if (!q) {
+    resultsEl.className = 'card-lookup-results open';
+    resultsEl.innerHTML = '<div class="lookup-status">Bitte zuerst einen Kartennamen eingeben.</div>';
+    return;
+  }
+  resultsEl.className = 'card-lookup-results open';
+  resultsEl.innerHTML = '<div class="lookup-status">Suche in Pokémon-Datenbank…</div>';
+  if (btn) btn.disabled = true;
+  try {
+    // Suche nach Name (englisch). Wildcard für Teiltreffer.
+    const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(q)}*"&pageSize=20&orderBy=-set.releaseDate`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('API-Fehler ' + res.status);
+    const json = await res.json();
+    _lookupResults = json.data || [];
+    if (!_lookupResults.length) {
+      resultsEl.innerHTML = '<div class="lookup-status">Keine Treffer. Tipp: englischen Namen probieren (z.B. „Charizard").</div>';
+      return;
+    }
+    resultsEl.innerHTML = _lookupResults.map((c, i) => {
+      const img = c.images?.small || '';
+      const setName = c.set?.name || '';
+      const num = c.number ? `${c.number}${c.set?.printedTotal ? '/'+c.set.printedTotal : ''}` : '';
+      const meta = [setName, num, c.rarity].filter(Boolean).join(' · ');
+      return `<div class="lookup-result" onclick="applyLookupResult(${i})">
+        ${img ? `<img src="${img}" alt="">` : ''}
+        <div class="lookup-result-info">
+          <div class="lookup-result-name">${c.name || ''}</div>
+          <div class="lookup-result-meta">${meta}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    console.error('Pokemon-Lookup Fehler:', e);
+    resultsEl.innerHTML = '<div class="lookup-status">Suche fehlgeschlagen. Internet prüfen oder später erneut versuchen.</div>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Versucht, den englischen API-Setnamen einem deutschen Set aus POKEMON_SETS zuzuordnen.
+function matchGermanSet(apiSetName) {
+  if (!apiSetName) return '';
+  const lower = apiSetName.toLowerCase();
+  // Direkter Teiltreffer im deutschen Namen
+  for (const s of POKEMON_SETS) {
+    if (s.name.toLowerCase().includes(lower)) return s.name;
+  }
+  // Schlüsselwort-Mapping EN -> Teilstring im deutschen Namen
+  const map = [
+    ['scarlet', 'Karmesin'], ['violet', 'Purpur'], ['151', '151'],
+    ['paldea', 'Paldea'], ['paradox', 'Paradox'], ['obsidian', 'Obsidian'],
+    ['temporal', 'Gewalten der Zeit'], ['twilight', 'Maskerade'],
+    ['shrouded', 'Nebel der Sagen'], ['stellar', 'Stellarkrone'],
+    ['surging', 'Stürmische Funken'], ['prismatic', 'Prismatische'],
+    ['sword', 'Schwert'], ['shield', 'Schild'], ['evolving', 'Drachenwandel'],
+    ['fusion', 'Fusionsangriff'], ['brilliant', 'Strahlende Sterne'],
+    ['astral', 'Astralglanz'], ['lost origin', 'Verlorener Ursprung'],
+    ['silver tempest', 'Silberne Sturmwinde'], ['crown zenith', 'Zenit der Könige'],
+    ['scarlet & violet', 'Karmesin & Purpur'],
+  ];
+  for (const [en, de] of map) {
+    if (lower.includes(en)) {
+      const found = POKEMON_SETS.find(s => s.name.toLowerCase().includes(de.toLowerCase()));
+      if (found) return found.name;
+    }
+  }
+  return ''; // kein Match -> User wählt manuell
+}
+
+function applyLookupResult(i) {
+  const c = _lookupResults[i];
+  if (!c) return;
+  // Name
+  const nameEl = document.getElementById('f_name');
+  if (nameEl) nameEl.value = c.name || nameEl.value;
+  // Kartennummer
+  const numEl = document.getElementById('f_cardnumber');
+  if (numEl && c.number) {
+    numEl.value = c.set?.printedTotal ? `${c.number}/${c.set.printedTotal}` : c.number;
+  }
+  // Set (versuche deutsches Set zu finden)
+  const matched = matchGermanSet(c.set?.name);
+  if (matched) {
+    document.getElementById('f_set_search').value = matched;
+    document.getElementById('f_set_name').value = matched;
+  }
+  // Offizielles Kartenbild als Vorderseite übernehmen (large bevorzugt)
+  const imgUrl = c.images?.large || c.images?.small;
+  if (imgUrl) {
+    loadAndSetLookupImage(imgUrl);
+  }
+  // Ergebnisliste schließen
+  const resultsEl = document.getElementById('cardLookupResults');
+  resultsEl.className = 'card-lookup-results';
+  resultsEl.innerHTML = '';
+  showSaveStatus('Kartendaten übernommen ✓');
+}
+
+// Lädt das offizielle Kartenbild, komprimiert es und setzt es als Vorderseite-Vorschau
+async function loadAndSetLookupImage(url) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const file = new File([blob], 'card.png', { type: blob.type });
+    imgBase64 = await compressImage(file, 1200, 0.8);
+    updateUploadPreview(imgBase64, 'uploadArea');
+  } catch(e) {
+    console.warn('Kartenbild konnte nicht geladen werden (CORS?):', e);
+    // Kein Abbruch – Name/Set/Nummer sind ja trotzdem gesetzt
+  }
+}
+
 function showDetail(idx) {
   const item = getItems(state.activeTcg, state.activeSection)[idx]; if (!item) return;
   document.getElementById("detailModalTitle").textContent = item.name;
@@ -2469,13 +2633,38 @@ async function buildSalesCard(item) {
   ctx.textAlign = 'left';
   ctx.fillText('PREIS', 40, ty + 10);
 
-  // Valora-Branding ganz unten
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.font = '600 30px Sora, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('Valora', 40, H - 50);
+  // Logo-Branding unten links auf hellem Badge
+  const logo = await loadImg('valoralogo.png');
+  if (logo) {
+    const lh = 70;                       // Logo-Höhe
+    const lw = lh * (logo.width / logo.height);
+    const padB = 16;
+    const badgeX = 40, badgeY = H - 40 - lh - padB;
+    // heller abgerundeter Hintergrund passend zum Logo
+    ctx.fillStyle = '#E8F7F9';
+    roundRect(ctx, badgeX, badgeY, lw + padB*2, lh + padB*2, 16);
+    ctx.fill();
+    ctx.drawImage(logo, badgeX + padB, badgeY + padB, lw, lh);
+  } else {
+    // Fallback: Text
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '600 30px Sora, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('Valora', 40, H - 50);
+  }
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+}
+
+// Hilfsfunktion: abgerundetes Rechteck
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 // Exportiert ein einzelnes Item als Verkaufsgrafik
